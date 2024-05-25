@@ -42,14 +42,12 @@ func searchSong(jwtToken, term string) (string, error) {
     if err != nil {
         return "", err
     }
-
     var result map[string]interface{}
     if err := json.Unmarshal(body, &result); err != nil {
         return "", err
     }
 
     songID := result["results"].(map[string]interface{})["songs"].(map[string]interface{})["data"].([]interface{})[0].(map[string]interface{})["id"].(string)
-
     return songID, nil
 }
 
