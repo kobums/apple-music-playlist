@@ -37,6 +37,15 @@ func parseFile(filename string) (string, []string, error) {
 }
 
 func main() {
+    // jwtToken, err := generateToken()
+    // if err != nil {
+    //     fmt.Println("Error generating token:", err)
+    //     return
+    // }
+    // fmt.Println(jwtToken)
+
+    jwtToken := "eyJhbGciOiJFUzI1NiIsImtpZCI6IjY5TTRYQkRENlIiLCJ0eXAiOiJKV1QifQ.eyJleHAiOjE3MTY2NTIzOTMsImlhdCI6MTcxNjY0ODc5MywiaXNzIjoiRzZCODJCSFZBWCJ9._KPfuOG5rCr_rM52AKWG8SdTmE8Dw14XL5eIrJrs4Nc7rWxIaAUexLERlbdHiz1rNAErL_RruWGe4CDeizHxuQ"
+
     loadEnv()
 
     filename := "playlist.txt" // 입력 파일 이름
@@ -48,36 +57,23 @@ func main() {
         return
     }
 
-    // jwtToken, err := generateToken()
-    // fmt.Println(jwtToken)
-
-    jwtToken := "eyJhbGciOiJFUzI1NiIsImtpZCI6IjY5TTRYQkRENlIiLCJ0eXAiOiJKV1QifQ.eyJleHAiOjE3MTY2Mzc0MzIsImlhdCI6MTcxNjYzMzgzMiwiaXNzIjoiRzZCODJCSFZBWCJ9.7MuZE8nFt9wdPjtk8qmLg-54U9yOxG7cYE3EnMutgZ0EB3_R9S1C4L5-7wLUNA8I27bhRcN5rMOio2dHLwjBWA"
-
-    // if err != nil {
-    //     fmt.Println("Error generating token:", err)
-    //     return
-    // }
-
     playlistID, err := createPlaylist(jwtToken, playlistName)
     if err != nil {
         fmt.Println("Error creating playlist:", err)
         return
     }
     for _, song := range songs {
-        // songDetails := song
         songDetails := strings.Split(song, " - ")
         if len(songDetails) != 2 {
             fmt.Println("Invalid song format:", song)
             continue
         }
-        fmt.Println(songDetails[0])
 
         searchTerm := fmt.Sprintf("%s %s", songDetails[0], songDetails[1])
-        // searchTerm := fmt.Sprintf("%s", songDetails[0])
         songID, err := searchSong(jwtToken, searchTerm)
 
         if err != nil {
-            fmt.Println("Error searching song:", err)
+            fmt.Println("Error searching song:", err, songDetails[0], songDetails[1])
             continue
         }
 
@@ -87,6 +83,6 @@ func main() {
             continue
         }
 
-        // fmt.Printf("Added song: %s to playlist\n", songDetails[0])
+        fmt.Printf("Added song: %s %s to playlist\n", songDetails[0], songDetails[1])
     }
 }
