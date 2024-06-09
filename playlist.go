@@ -30,7 +30,6 @@ func createPlaylist(jwtToken string, playlistName string) (string, error) {
     
     // 헤더 설정
     userToken := os.Getenv("USER_TOKEN")
-    // req.Header.Set("Authorization", "Bearer "+userToken)
     req.Header.Set("Content-Type", "application/json")
 
     req.Header.Set("Authorization", "Bearer "+jwtToken)
@@ -51,7 +50,7 @@ func createPlaylist(jwtToken string, playlistName string) (string, error) {
     }
     
     // 응답 디버그 출력
-    fmt.Println("Response Body:", string(body))
+    // fmt.Println("Response Body:", string(body))
     
     var result map[string]interface{}
     if err := json.Unmarshal(body, &result); err != nil {

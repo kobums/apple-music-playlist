@@ -20,6 +20,12 @@ type AddTracksRequest struct {
 }
 
 func searchSong(jwtToken, term string) (string, error) {
+    defer func() {
+        if r := recover(); r != nil {
+            fmt.Println(term)
+        }
+    }()
+
     userToken := os.Getenv("USER_TOKEN")
     url := fmt.Sprintf("https://api.music.apple.com/v1/catalog/us/search?term=%s&types=songs", url.QueryEscape(term))
 

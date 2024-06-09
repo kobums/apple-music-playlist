@@ -37,20 +37,19 @@ func parseFile(filename string) (string, []string, error) {
 }
 
 func main() {
-    // jwtToken, err := generateToken()
-    // if err != nil {
-    //     fmt.Println("Error generating token:", err)
-    //     return
-    // }
-    // fmt.Println(jwtToken)
-
-    jwtToken := "eyJhbGciOiJFUzI1NiIsImtpZCI6IjY5TTRYQkRENlIiLCJ0eXAiOiJKV1QifQ.eyJleHAiOjE3MTY2NTIzOTMsImlhdCI6MTcxNjY0ODc5MywiaXNzIjoiRzZCODJCSFZBWCJ9._KPfuOG5rCr_rM52AKWG8SdTmE8Dw14XL5eIrJrs4Nc7rWxIaAUexLERlbdHiz1rNAErL_RruWGe4CDeizHxuQ"
 
     loadEnv()
 
+    jwtToken, err := generateToken()
+    if err != nil {
+        fmt.Println("Error generating token:", err)
+        return
+    }
+    // fmt.Println(jwtToken)
+
     filename := "playlist.txt" // 입력 파일 이름
     playlistName, songs, err := parseFile(filename)
-    fmt.Print(playlistName)
+    // fmt.Print(playlistName)
 
     if err != nil {
         fmt.Println("Error reading file:", err)
@@ -79,10 +78,11 @@ func main() {
 
         err = addTrackToPlaylist(jwtToken, playlistID, songID)
         if err != nil {
-            fmt.Println("Error adding track to playlist:", err)
+            fmt.Printf("Not Added song: %s - %s\n", songDetails[0], songDetails[1])
+            // fmt.Println("Error adding track to playlist:", err)
             continue
         }
 
-        fmt.Printf("Added song: %s %s to playlist\n", songDetails[0], songDetails[1])
+        // fmt.Printf("Added song: %s %s to playlist\n", songDetails[0], songDetails[1])
     }
 }
