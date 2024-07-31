@@ -55,4 +55,4 @@ playlistname: My Favorite Songs
 
 ## 문의 사항
 
-프로젝트에 대한 추가 문의 사항이 있을 경우 [여기](kobums@naver.com)로 문의해 주세요.
+프로젝트에 대한 추가 문의 사항이 있을 경우 [여기](mailto:kobums@naver.com)로 문의해 주세요.
