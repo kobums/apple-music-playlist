@@ -83,3 +83,50 @@ func createPlaylist(jwtToken string, playlistName string) (string, error) {
     
     return playlistId, nil
 }
+
+func listPlaylists(jwtToken string) ([]map[string]interface{}, error) {
+    url := "https://api.music.apple.com/v1/me/library/playlists?limit=100"
+
+    req, err := http.NewRequest("GET", url, nil)
+    if err != nil {
+        return nil, err
+    }
+
+    userToken := os.Getenv("USER_TOKEN")
+    req.Header.Set("Authorization", "Bearer "+jwtToken)
+    req.Header.Set("Music-User-Token", userToken)
+    req.Header.Set("Content-Type", "application/json")
+
+    client := &http.Client{}
+    resp, err := client.Do(req)
+    if err != nil {
+        return nil, err
+    }
+    defer resp.Body.Close()
+
+    body, err := ioutil.ReadAll(resp.Body)
+    if err != nil {
+        return nil, err
+    }
+
+    var result map[string]interface{}
+    if err := json.Unmarshal(body, &result); err != nil {
+        return nil, err
+    }
+
+    playlistsData, ok := result["data"].([]interface{})
+    if !ok {
+        return nil, fmt.Errorf("expected []interface{}, got %T", result["data"])
+    }
+
+    var playlists []map[string]interface{}
+    for _, item := range playlistsData {
+        playlist, ok := item.(map[string]interface{})
+        if !ok {
+            continue
+        }
+        playlists = append(playlists, playlist)
+    }
+
+    return playlists, nil
+}

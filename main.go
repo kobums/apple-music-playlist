@@ -56,7 +56,39 @@ func main() {
         return
     }
 
-    playlistID, err := createPlaylist(jwtToken, playlistName)
+    playlists, err := listPlaylists(jwtToken)
+    if err != nil {
+        fmt.Println("Error retrieving playlists:", err)
+        return
+    }
+
+    var playlistID string
+
+    // 기존 플레이리스트 검색
+    found := false
+    for _, playlist := range playlists {
+        fmt.Println(playlist["attributes"].(map[string]interface{})["name"].(string))
+        if playlistName == playlist["attributes"].(map[string]interface{})["name"].(string) {
+            if id, ok := playlist["id"].(string); ok {
+                playlistID = id
+                found = true
+                break
+            } else {
+                fmt.Println("Failed to type assert playlist ID")
+            }
+        }
+    }
+
+    // 플레이리스트가 없으면 새로 생성
+    if !found {
+        playlistID, err = createPlaylist(jwtToken, playlistName)
+        if err != nil {
+            fmt.Println("Error creating playlist:", err)
+            return
+        }
+    }
+
+
     if err != nil {
         fmt.Println("Error creating playlist:", err)
         return
