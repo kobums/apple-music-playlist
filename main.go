@@ -45,7 +45,7 @@ func main() {
 		fmt.Println("Error generating token:", err)
 		return
 	}
-	// fmt.Println(jwtToken)
+	// fmt.Println(jwtToken))
 
 	filename := "playlist.txt" // 입력 파일 이름
 	playlistName, songs, err := parseFile(filename)
