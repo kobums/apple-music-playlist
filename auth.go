@@ -23,7 +23,7 @@ func generateToken() (string, error) {
     teamID := os.Getenv("TEAM_ID")
 	keyID := os.Getenv("KEY_ID")
 
-	privateKeyData, err := os.ReadFile("AuthKey_69M4XBDD6R.p8")
+	privateKeyData, err := os.ReadFile("AuthKey_GXVS6H2456.p8")
 	if err != nil {
 		return "", err
 	}
