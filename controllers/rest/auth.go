@@ -1,4 +1,4 @@
-package main
+package rest
 
 import (
 	"crypto/ecdsa"
@@ -10,17 +10,22 @@ import (
 
 	"github.com/dgrijalva/jwt-go/v4"
 	"github.com/joho/godotenv"
+	"github.com/kobums/playlist/controllers"
 )
 
-func loadEnv() {
-    err := godotenv.Load(".env")
-    if err != nil {
-        fmt.Println("Error loading .env file")
-    }
+type AuthController struct {
+	controllers.Controller
 }
 
-func generateToken() (string, error) {
-    teamID := os.Getenv("TEAM_ID")
+func (c *AuthController) LoadEnv() {
+	err := godotenv.Load(".env")
+	if err != nil {
+		fmt.Println("Error loading .env file")
+	}
+}
+
+func (c *AuthController) GenerateToken() (string, error) {
+	teamID := os.Getenv("TEAM_ID")
 	keyID := os.Getenv("KEY_ID")
 
 	privateKeyData, err := os.ReadFile("AuthKey_GXVS6H2456.p8")

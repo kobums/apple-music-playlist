@@ -1,0 +1,10 @@
+version: "3"
+
+services:
+  backend:
+    restart: always
+    image: kobums/apple_music_playlist
+    ports:
+      - "8002:8002"
+    volumes:
+      - /home/apple_music_playlist/webdata:/usr/local/main/webdata
