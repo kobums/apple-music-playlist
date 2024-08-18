@@ -27,10 +27,10 @@ dockerbuild:
 	env CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -ldflags '-s' -o bin/apple_music_playlist.linux main.go
 
 docker: dockerbuild
-	docker build -t kobums/apple_music_playlist:$(tag) .
+	docker build --platform linux/amd64 -t kobums/apple_music_playlist:$(tag) .
 
 dockerrun:
-	docker run -d --name="apple_music_playlist" -p 8002:8002 kobums/apple_music_playlist
+	docker run --platform -d --name="apple_music_playlist" -p 8002:8002 kobums/apple_music_playlist
 
 push: docker
 	docker push kobums/apple_music_playlist:$(tag)
