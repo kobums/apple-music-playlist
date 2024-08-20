@@ -6,5 +6,7 @@ services:
     image: kobums/apple_music_playlist
     ports:
       - "8002:8002"
+    env_file:
+      - .env
     volumes:
       - /home/apple_music_playlist/webdata:/usr/local/main/webdata

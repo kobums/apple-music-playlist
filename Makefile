@@ -30,7 +30,7 @@ docker: dockerbuild
 	docker build --platform linux/amd64 -t kobums/apple_music_playlist:$(tag) .
 
 dockerrun:
-	docker run --platform -d --name="apple_music_playlist" -p 8002:8002 kobums/apple_music_playlist
+	docker run --env-file .env --platform linux/amd64 -d --name="apple_music_playlist" -p 8002:8002 kobums/apple_music_playlist:$(tag)
 
 push: docker
 	docker push kobums/apple_music_playlist:$(tag)

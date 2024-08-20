@@ -28,6 +28,9 @@ func (c *PlaylistController) generateToken() (string, error) {
 	teamID := os.Getenv("TEAM_ID")
 	keyID := os.Getenv("KEY_ID")
 
+	fmt.Println(teamID)
+	fmt.Println(keyID)
+
 	privateKeyData, err := os.ReadFile("AuthKey_GXVS6H2456.p8")
 	if err != nil {
 		return "", err
@@ -64,7 +67,7 @@ func (c *PlaylistController) generateToken() (string, error) {
 	return tokenString, nil
 }
 
-func (c *PlaylistController) createPlaylist(jwtToken string, playlistName string) (string, error) {
+func (c *PlaylistController) createPlaylist(jwtToken string, playlistName string, userToken string) (string, error) {
 	// API URL 설정
 	url := "https://api.music.apple.com/v1/me/library/playlists"
 
@@ -83,7 +86,6 @@ func (c *PlaylistController) createPlaylist(jwtToken string, playlistName string
 	}
 
 	// 헤더 설정
-	userToken := os.Getenv("USER_TOKEN")
 	req.Header.Set("Content-Type", "application/json")
 
 	req.Header.Set("Authorization", "Bearer "+jwtToken)
@@ -223,6 +225,7 @@ func (c *PlaylistController) GetDeveloperToken() fiber.Map {
 	token, err := c.generateToken()
 	if err != nil {
 		fmt.Println("Error reading file:", err)
+		token = "errorerror"
 	}
 
 	return fiber.Map{
@@ -282,7 +285,7 @@ func (c *PlaylistController) HandlePlaylist(item *models.Playlist) {
 	}
 
 	if !found {
-		playlistID, err = c.createPlaylist(jwtToken, playlistName)
+		playlistID, err = c.createPlaylist(jwtToken, playlistName, item.UserToken)
 		if err != nil {
 			fmt.Println("failed to create playlist: %w", err)
 		}
