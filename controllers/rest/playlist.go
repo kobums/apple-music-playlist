@@ -211,7 +211,7 @@ func (c *PlaylistController) parsePlaylist(playlist string) []string {
 			// 이 부분은 playlist 이름을 처리하는 부분이므로 필요하지 않다면 삭제할 수 있습니다.
 			continue
 		} else {
-			song := regexp.MustCompile(`\s*\d+:\d+`).ReplaceAllString(line, "")
+			song := regexp.MustCompile(`\s*\d{1,2}:\d{2}(?::\d{2})?`).ReplaceAllString(line, "")
 			songs = append(songs, strings.TrimSpace(song))
 		}
 	}
