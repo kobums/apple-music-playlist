@@ -36,16 +36,3 @@ func main() {
 
 	log.Fatal(app.Listen(":8002"))
 }
-
-// func main() {
-
-// 	var controller rest.AuthController
-// 	controller.LoadEnv()
-
-// 	jwtToken, err := controller.GenerateToken()
-// 	if err != nil {
-// 		fmt.Println("Error generating token:", err)
-// 		return
-// 	}
-// 	fmt.Println(jwtToken)
-// }

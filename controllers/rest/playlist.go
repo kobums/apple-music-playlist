@@ -28,9 +28,6 @@ func (c *PlaylistController) generateToken() (string, error) {
 	teamID := os.Getenv("TEAM_ID")
 	keyID := os.Getenv("KEY_ID")
 
-	fmt.Println(teamID)
-	fmt.Println(keyID)
-
 	privateKeyData, err := os.ReadFile("AuthKey_GXVS6H2456.p8")
 	if err != nil {
 		return "", err
@@ -105,9 +102,6 @@ func (c *PlaylistController) createPlaylist(jwtToken string, playlistName string
 		return "", err
 	}
 
-	// 응답 디버그 출력
-	// fmt.Println("Response Body:", string(body))
-
 	var result map[string]interface{}
 	if err := json.Unmarshal(body, &result); err != nil {
 		return "", err
@@ -169,9 +163,6 @@ func (c *PlaylistController) listPlaylists(jwtToken, userToken string) ([]map[st
 	if err != nil {
 		return nil, err
 	}
-
-	// 응답 내용 디버깅
-	// fmt.Println("Response Body:", string(body))
 
 	var result map[string]interface{}
 	if err := json.Unmarshal(body, &result); err != nil {
@@ -251,14 +242,6 @@ func (c *PlaylistController) HandlePlaylist(item *models.Playlist) {
 	var playlistID string
 	found := false
 	for _, playlist := range playlists {
-		fmt.Println(playlist["attributes"].(map[string]interface{})["name"].(string))
-		// if playlistName == playlist["attributes"].(map[string]interface{})["name"].(string) {
-		// 	if id, ok := playlist["id"].(string); ok {
-		// 		playlistID = id
-		// 		found = true
-		// 		break
-		// 	}
-		// }
 		attributes, ok := playlist["attributes"].(map[string]interface{})
 		if !ok {
 			// attributes가 예상한 타입이 아니거나 nil일 경우
@@ -295,7 +278,7 @@ func (c *PlaylistController) HandlePlaylist(item *models.Playlist) {
 	results := []map[string]interface{}{}
 
 	for _, song := range songs {
-		songDetails := strings.Split(song, " - ")
+		songDetails := strings.Split(transformText(song), " - ")
 		if len(songDetails) != 2 {
 			results = append(results, map[string]interface{}{
 				"song":   song,
@@ -330,4 +313,52 @@ func (c *PlaylistController) HandlePlaylist(item *models.Playlist) {
 	}
 
 	c.Set("result", results)
+}
+
+// removeParentheses 함수는 문자열에서 괄호와 그 안의 내용을 제거합니다.
+func removeParentheses(s string) string {
+	index := strings.Index(s, "(")
+	if index != -1 {
+		s = strings.TrimSpace(s[:index])
+	}
+	return s
+}
+
+// transformText 함수는 입력된 텍스트를 원하는 형식으로 변환합니다.
+func transformText(input string) string {
+	var artist, title string
+
+	// 첫 번째 패턴: "07:19 | 아티스트 ‘곡 제목’"
+	pattern1 := `\|\s*(.*?)\s*‘(.*?)’`
+	re1 := regexp.MustCompile(pattern1)
+	matches1 := re1.FindStringSubmatch(input)
+
+	// 두 번째 패턴: "07:19 | 아티스트 - 곡 제목"
+	pattern2 := `\|\s*(.*?)\s*-\s*(.*)`
+	re2 := regexp.MustCompile(pattern2)
+	matches2 := re2.FindStringSubmatch(input)
+
+	// 세 번째 패턴: "아티스트 - 곡 제목"
+	pattern3 := `^(.*?)\s*-\s*(.*)$`
+	re3 := regexp.MustCompile(pattern3)
+	matches3 := re3.FindStringSubmatch(input)
+
+	if len(matches1) >= 3 {
+		artist = matches1[1]
+		title = matches1[2]
+	} else if len(matches2) >= 3 {
+		artist = matches2[1]
+		title = matches2[2]
+	} else if len(matches3) >= 3 {
+		artist = matches3[1]
+		title = matches3[2]
+	} else {
+		return input
+	}
+
+	// 괄호와 그 안의 내용 제거
+	artist = removeParentheses(artist)
+	title = removeParentheses(title)
+
+	return artist + " - " + title
 }

@@ -27,7 +27,6 @@ type AddTracksRequest struct {
 func (c *SongController) searchSong(jwtToken, userToken, term string) (songID string, err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			fmt.Println(term)
 			songID = ""                                                         // songID를 빈 문자열로 설정
 			err = fmt.Errorf("panic occurred during search for term: %s", term) // 에러 메시지 설정
 		}
@@ -64,7 +63,6 @@ func (c *SongController) searchSong(jwtToken, userToken, term string) (songID st
 		return "", fmt.Errorf("failed to extract song ID")
 	}
 
-	fmt.Println(songID)
 	return songID, nil
 }
 
