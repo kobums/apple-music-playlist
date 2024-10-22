@@ -278,10 +278,11 @@ func (c *PlaylistController) HandlePlaylist(item *models.Playlist) {
 	results := []map[string]interface{}{}
 
 	for _, song := range songs {
-		songDetails := strings.Split(transformText(song), " - ")
+		transSong := transformText(song)
+		songDetails := strings.Split(transSong, " - ")
 		if len(songDetails) != 2 {
 			results = append(results, map[string]interface{}{
-				"song":   song,
+				"song":   transSong,
 				"status": false,
 			})
 			continue
@@ -292,7 +293,7 @@ func (c *PlaylistController) HandlePlaylist(item *models.Playlist) {
 
 		if err != nil {
 			results = append(results, map[string]interface{}{
-				"song":   song,
+				"song":   transSong,
 				"status": false,
 			})
 			continue
@@ -301,12 +302,12 @@ func (c *PlaylistController) HandlePlaylist(item *models.Playlist) {
 		err = songController.addTrackToPlaylist(jwtToken, item.UserToken, playlistID, songID)
 		if err != nil {
 			results = append(results, map[string]interface{}{
-				"song":   song,
+				"song":   transSong,
 				"status": false,
 			})
 		} else {
 			results = append(results, map[string]interface{}{
-				"song":   song,
+				"song":   transSong,
 				"status": true,
 			})
 		}
