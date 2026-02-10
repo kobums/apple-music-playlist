@@ -12,7 +12,7 @@ require github.com/CloudyKit/fastprinter v0.0.0-20200109182630-33d98a066a53 // i
 require (
 	github.com/CloudyKit/jet/v3 v3.0.1
 	github.com/andybalholm/brotli v1.1.0 // indirect
-	github.com/gofiber/fiber/v2 v2.52.9
+	github.com/gofiber/fiber/v2 v2.52.11
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/klauspost/compress v1.17.9 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
