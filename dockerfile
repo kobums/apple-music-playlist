@@ -24,11 +24,14 @@ WORKDIR /usr/local/main
 
 COPY --from=builder /out/apple_music_playlist ./main
 
-# MusicKit 개인 키.
-# 파일명에 Key ID 가 들어가서 키를 교체할 때마다 바뀌므로 글롭으로 복사하고,
-# 실제 경로는 .env 의 PRIVATE_KEY_PATH 로 지정한다.
-COPY --chown=app:app AuthKey_*.p8 ./
-RUN chmod 400 ./AuthKey_*.p8
+# MusicKit 개인 키는 이미지에 굽지 않는다.
+#
+# 이 이미지는 공개 레지스트리(kobums/apple_music_playlist)에 올라가므로, 키를
+# COPY 하면 누구나 pull 해서 꺼낼 수 있다. 파일 권한 400 은 컨테이너 안에서만
+# 의미가 있을 뿐 레이어를 받는 것을 막지 못한다.
+#
+# 대신 런타임에 호스트의 /data/apple_music_playlist 를 읽기 전용으로 마운트하고,
+# PRIVATE_KEY_PATH 로 파일을 지정한다. docker-compose.yml 참고.
 
 # 예전 이미지는 `CMD mkdir -p ...` 을 썼는데, CMD 는 마지막 하나만 적용되므로
 # 이 디렉터리는 실제로 만들어지지 않았다.

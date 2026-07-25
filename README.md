@@ -45,6 +45,24 @@ Apple Music API로 사용자의 라이브러리 플레이리스트를 관리하�
 | `ALLOWED_ORIGINS` | 프로덕션 + `localhost:9002` | CORS 허용 오리진 (쉼표 구분) |
 
 `.p8` 개인 키 파일은 저장소에 커밋하지 않습니다(`.gitignore`에 등록되어 있습니다).
+**도커 이미지에도 굽지 않습니다** — 이 이미지는 공개 레지스트리에 올라가므로, 키를 넣으면
+누구나 `docker pull` 로 꺼낼 수 있습니다. 서버에서는 아래처럼 마운트해서 씁니다.
+
+```bash
+sudo mkdir -p /data/apple_music_playlist
+sudo cp AuthKey_XXXXXXXXXX.p8 /data/apple_music_playlist/
+# 컨테이너는 uid 10001(app) 로 실행되므로 소유자를 맞춰야 읽힙니다.
+sudo chown 10001:10001 /data/apple_music_playlist/AuthKey_*.p8
+sudo chmod 400 /data/apple_music_playlist/AuthKey_*.p8
+```
+
+그리고 서버의 `.env` 에 절대 경로를 넣습니다.
+
+```
+PRIVATE_KEY_PATH=/data/apple_music_playlist/AuthKey_XXXXXXXXXX.p8
+```
+
+마운트는 `docker-compose.yml` 에 이미 정의되어 있습니다.
 
 `TEAM_ID`·`KEY_ID`·`.p8` 는 반드시 같은 팀에서 발급된 것끼리 짝이 맞아야 합니다. 하나라도
 어긋나면 Apple 이 401 을 돌려줍니다. 키를 교체해서 구 키와 신 키가 함께 있으면 자동 탐색이
