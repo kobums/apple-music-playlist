@@ -138,13 +138,15 @@ func (c *PlaylistController) HandlePlaylist(ctx context.Context, item *models.Pl
 	// Only an existing playlist can already hold anything, so a freshly created
 	// one skips the lookup entirely.
 	var existing *TrackSet
+	var existingCount int
 	if found {
 		tracks, err := client.PlaylistTracks(ctx, playlistID)
 		if err != nil {
 			return err
 		}
 		existing = NewTrackSet(tracks)
-		log.Printf("playlist %q → %s (existing, %d tracks)", title, playlistID, len(tracks))
+		existingCount = len(tracks)
+		log.Printf("playlist %q → %s (existing, %d tracks)", title, playlistID, existingCount)
 	} else {
 		existing = NewTrackSet(nil)
 		log.Printf("playlist %q → %s (created)", title, playlistID)
@@ -218,6 +220,12 @@ func (c *PlaylistController) HandlePlaylist(ctx context.Context, item *models.Pl
 	// The playlist id lets the browser add confirmed picks afterwards without
 	// re-resolving the playlist by name.
 	c.Set("playlistId", playlistID)
+	// Name and prior track count are shown on the results screen. Without them
+	// "already there" on a playlist the user believes is empty looks like a bug,
+	// when it usually means they are looking at a different playlist.
+	c.Set("playlistName", title)
+	c.Set("playlistExistingCount", existingCount)
+	c.Set("playlistCreated", !found)
 	c.Set("result", results)
 	return nil
 }

@@ -3,6 +3,8 @@ package rest
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -73,11 +76,25 @@ type appleMusicClient struct {
 	httpClient     *http.Client
 }
 
+// sharedHTTPClient is reused across requests so connections to Apple stay warm.
+//
+// A fresh &http.Client{} per request means a fresh connection pool, so every
+// request paid for DNS resolution and a TLS handshake again — the first search
+// after an idle period took seconds while a follow-up took a fraction of that.
+var sharedHTTPClient = &http.Client{
+	Timeout: 20 * time.Second,
+	Transport: &http.Transport{
+		MaxIdleConns:        100,
+		MaxIdleConnsPerHost: 10,
+		IdleConnTimeout:     90 * time.Second,
+	},
+}
+
 func newAppleMusicClient(developerToken, userToken string) *appleMusicClient {
 	return &appleMusicClient{
 		developerToken: developerToken,
 		userToken:      userToken,
-		httpClient:     &http.Client{Timeout: 20 * time.Second},
+		httpClient:     sharedHTTPClient,
 	}
 }
 
@@ -141,16 +158,73 @@ type storefrontResponse struct {
 	} `json:"data"`
 }
 
+// storefrontTTL is how long a resolved storefront is reused. An account's
+// storefront changes at most when someone moves country, so an hour is ample.
+const storefrontTTL = time.Hour
+
+type storefrontEntry struct {
+	id        string
+	expiresAt time.Time
+}
+
+var (
+	storefrontMu    sync.Mutex
+	storefrontCache = map[string]storefrontEntry{}
+)
+
+// storefrontCacheKey hashes the user token so the cache never holds raw
+// credentials in a long-lived map.
+func storefrontCacheKey(userToken string) string {
+	sum := sha256.Sum256([]byte(userToken))
+	return hex.EncodeToString(sum[:])
+}
+
+func cachedStorefront(key string) (string, bool) {
+	storefrontMu.Lock()
+	defer storefrontMu.Unlock()
+
+	entry, ok := storefrontCache[key]
+	if !ok || time.Now().After(entry.expiresAt) {
+		return "", false
+	}
+	return entry.id, true
+}
+
+func rememberStorefront(key, id string) {
+	storefrontMu.Lock()
+	defer storefrontMu.Unlock()
+
+	now := time.Now()
+	// Drop expired entries on write so the map cannot grow without bound.
+	for k, entry := range storefrontCache {
+		if now.After(entry.expiresAt) {
+			delete(storefrontCache, k)
+		}
+	}
+	storefrontCache[key] = storefrontEntry{id: id, expiresAt: now.Add(storefrontTTL)}
+}
+
 // Storefront returns the storefront id (e.g. "kr") tied to the signed-in
 // account, falling back to defaultStorefront when it cannot be determined.
+//
+// The result is cached per user: every search used to spend an extra round trip
+// re-asking Apple for something that effectively never changes.
 func (c *appleMusicClient) Storefront(ctx context.Context) string {
+	key := storefrontCacheKey(c.userToken)
+	if id, ok := cachedStorefront(key); ok {
+		return id
+	}
+
 	var result storefrontResponse
 	if err := c.do(ctx, http.MethodGet, "/v1/me/storefront", nil, &result); err != nil {
+		// Not cached: a transient failure should not pin the fallback for an hour.
 		return defaultStorefront
 	}
 	if len(result.Data) == 0 || result.Data[0].ID == "" {
 		return defaultStorefront
 	}
+
+	rememberStorefront(key, result.Data[0].ID)
 	return result.Data[0].ID
 }
 
