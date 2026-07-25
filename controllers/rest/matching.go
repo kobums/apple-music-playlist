@@ -38,9 +38,18 @@ type TrackSet struct {
 	names      map[string]bool
 }
 
-// trackKey normalizes "artist + title" into a comparable identity.
+// trackKey normalizes "artist + title" into a comparable identity, or "" when
+// there is nothing to compare.
+//
+// Returning "" for a blank pair matters: callers that only have a catalog id
+// (confirming a user's pick) pass an otherwise empty Track, and a shared blank
+// key would make every one of them look like the same recording.
 func trackKey(artist, title string) string {
-	return normalize(artist) + "\x00" + normalize(title)
+	normalizedArtist, normalizedTitle := normalize(artist), normalize(title)
+	if normalizedArtist == "" && normalizedTitle == "" {
+		return ""
+	}
+	return normalizedArtist + "\x00" + normalizedTitle
 }
 
 func NewTrackSet(tracks []Track) *TrackSet {
@@ -52,7 +61,7 @@ func NewTrackSet(tracks []Track) *TrackSet {
 		if track.ID != "" {
 			set.catalogIDs[track.ID] = true
 		}
-		if key := trackKey(track.ArtistName, track.Name); key != "\x00" {
+		if key := trackKey(track.ArtistName, track.Name); key != "" {
 			set.names[key] = true
 		}
 	}
@@ -76,7 +85,7 @@ func (s *TrackSet) Find(track Track) (DuplicateReason, bool) {
 	if track.ID != "" && s.catalogIDs[track.ID] {
 		return DuplicateByCatalogID, true
 	}
-	if s.names[trackKey(track.ArtistName, track.Name)] {
+	if key := trackKey(track.ArtistName, track.Name); key != "" && s.names[key] {
 		return DuplicateByName, true
 	}
 	return "", false
@@ -97,7 +106,12 @@ func (s *TrackSet) Add(track Track) {
 	if track.ID != "" {
 		s.catalogIDs[track.ID] = true
 	}
-	s.names[trackKey(track.ArtistName, track.Name)] = true
+	// The guard was missing here while NewTrackSet had it, so confirming a pick
+	// that carried only a catalog id wrote a blank key that then matched every
+	// later id-only track.
+	if key := trackKey(track.ArtistName, track.Name); key != "" {
+		s.names[key] = true
+	}
 }
 
 var (
