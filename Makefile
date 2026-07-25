@@ -2,31 +2,29 @@ tag=latest
 
 all: server
 
+# router/router.go 는 이제 직접 관리한다.
+# 예전 server 타깃은 buildtool-router 로 router.go 를 덮어썼는데,
+# 라우터에 에러 처리와 상태 코드 매핑이 들어가면서 코드 생성으로는 표현할 수 없게 됐다.
 server: dummy
-	buildtool-model ./ 
-	buildtool-router ./ > ./router/router.go
 	go build -o bin/apple_music_playlist main.go
 
-fswatch:
-	fswatch -0 controllers | xargs -0 -n1 build/notify.sh
-
 run:
-	gin --port 8002 -a 8002 --bin bin/apple_music_playlist run main.go
-
-allrun:
-	fswatch -0 controllers | xargs -0 -n1 build/notify.sh &
-	gin --port 8002 -a 8002 --bin bin/apple_music_playlist run main.go
+	go run main.go
 
 test: dummy
-	go test -v ./...
+	go test ./...
+
+vet:
+	go vet ./...
+
+fmt:
+	gofmt -l -w .
 
 linux:
 	env GOOS=linux GOARCH=amd64 go build -o bin/apple_music_playlist.linux main.go
 
-dockerbuild:
-	env CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -ldflags '-s' -o bin/apple_music_playlist.linux main.go
-
-docker: dockerbuild
+# 이미지 빌드는 멀티스테이지 Dockerfile 이 처리하므로 호스트 빌드에 의존하지 않는다.
+docker:
 	docker build --platform linux/amd64 -t kobums/apple_music_playlist:$(tag) .
 
 dockerrun:
@@ -36,6 +34,6 @@ push: docker
 	docker push kobums/apple_music_playlist:$(tag)
 
 clean:
-	rm -f bin/apple_music_playlist
+	rm -f bin/apple_music_playlist bin/apple_music_playlist.linux
 
 dummy:
