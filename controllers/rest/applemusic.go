@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -232,7 +233,18 @@ type libraryPlaylist struct {
 	ID         string `json:"id"`
 	Attributes struct {
 		Name string `json:"name"`
+		// CanEdit is false for playlists Apple owns (curated ones added to the
+		// library). Offering those as a target would fail only at save time, so
+		// they are filtered out before the user ever sees them.
+		CanEdit   bool   `json:"canEdit"`
+		DateAdded string `json:"dateAdded"`
 	} `json:"attributes"`
+}
+
+// Playlist is a library playlist the user can be offered as a target.
+type Playlist struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
 }
 
 type libraryPlaylistsResponse struct {
@@ -460,6 +472,38 @@ func (c *appleMusicClient) AddTracks(ctx context.Context, playlistID string, son
 
 	path := fmt.Sprintf("/v1/me/library/playlists/%s/tracks", url.PathEscape(playlistID))
 	return c.do(ctx, http.MethodPost, path, body, nil)
+}
+
+// editablePlaylists narrows the library down to what can actually be written
+// to, newest first — a playlist the user just made is usually the target.
+func editablePlaylists(playlists []libraryPlaylist) []Playlist {
+	type entry struct {
+		playlist  Playlist
+		dateAdded string
+	}
+
+	entries := make([]entry, 0, len(playlists))
+	for _, playlist := range playlists {
+		if playlist.ID == "" || !playlist.Attributes.CanEdit {
+			continue
+		}
+		entries = append(entries, entry{
+			playlist:  Playlist{ID: playlist.ID, Name: playlist.Attributes.Name},
+			dateAdded: playlist.Attributes.DateAdded,
+		})
+	}
+
+	// dateAdded is ISO-8601, so lexical order is chronological. Stable sort
+	// keeps Apple's own ordering for entries that share a timestamp.
+	sort.SliceStable(entries, func(i, j int) bool {
+		return entries[i].dateAdded > entries[j].dateAdded
+	})
+
+	editable := make([]Playlist, 0, len(entries))
+	for _, e := range entries {
+		editable = append(editable, e.playlist)
+	}
+	return editable
 }
 
 // findPlaylistsByName returns every playlist with this exact name, ignoring

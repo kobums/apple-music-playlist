@@ -83,6 +83,25 @@ func SetRouter(app *fiber.App) {
 		return ctx.JSON(controller.Result)
 	})
 
+	// Playlists the user can add to, so a target is picked rather than typed.
+	app.Post("/api/playlists", func(ctx *fiber.Ctx) error {
+		item := &models.PlaylistsRequest{}
+		if err := ctx.BodyParser(item); err != nil {
+			return badRequest(ctx)
+		}
+
+		var controller rest.PlaylistController
+		controller.Init(ctx)
+
+		playlists, err := controller.ListPlaylists(ctx.UserContext(), item.UserToken)
+		if err != nil {
+			return fail(ctx, "list playlists", err)
+		}
+
+		controller.Set("playlists", playlists)
+		return ctx.JSON(controller.Result)
+	})
+
 	// Used when someone rejects a suggested match and looks for the right track.
 	app.Post("/api/search", func(ctx *fiber.Ctx) error {
 		item := &models.SearchRequest{}

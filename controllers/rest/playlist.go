@@ -93,7 +93,9 @@ func (c *PlaylistController) parsePlaylist(playlist string) []string {
 // nothing — the user saw every song reported as "failed" with no reason.
 func (c *PlaylistController) HandlePlaylist(ctx context.Context, item *models.Playlist) error {
 	title := strings.TrimSpace(item.Title)
-	if title == "" {
+	targetID := strings.TrimSpace(item.PlaylistID)
+	// A title is only required when there is no chosen playlist to add to.
+	if targetID == "" && title == "" {
 		return ErrMissingTitle
 	}
 	if strings.TrimSpace(item.UserToken) == "" {
@@ -109,29 +111,37 @@ func (c *PlaylistController) HandlePlaylist(ctx context.Context, item *models.Pl
 	client := newAppleMusicClient(developerToken, item.UserToken)
 	songs := c.parsePlaylist(item.List)
 
-	playlists, err := client.LibraryPlaylists(ctx)
-	if err != nil {
-		return err
-	}
-
-	matches := findPlaylistsByName(playlists, title)
-	found := len(matches) > 0
-
 	var playlistID string
-	if found {
-		playlistID = matches[0]
-		if len(matches) > 1 {
-			// Apple Music allows duplicate names. Picking the first is a guess,
-			// and the user may well be looking at one of the others.
-			log.Printf(
-				"playlist %q matches %d playlists (%v); using %s",
-				title, len(matches), matches, playlistID,
-			)
-		}
+	var found bool
+
+	if targetID != "" {
+		// The user picked from the list, so there is nothing to resolve: no name
+		// matching, no ambiguity, and one less round trip to Apple.
+		playlistID, found = targetID, true
 	} else {
-		playlistID, err = client.CreatePlaylist(ctx, title)
+		playlists, err := client.LibraryPlaylists(ctx)
 		if err != nil {
 			return err
+		}
+
+		matches := findPlaylistsByName(playlists, title)
+		found = len(matches) > 0
+
+		if found {
+			playlistID = matches[0]
+			if len(matches) > 1 {
+				// Apple Music allows duplicate names. Picking the first is a
+				// guess, and the user may well mean one of the others.
+				log.Printf(
+					"playlist %q matches %d playlists (%v); using %s",
+					title, len(matches), matches, playlistID,
+				)
+			}
+		} else {
+			playlistID, err = client.CreatePlaylist(ctx, title)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
@@ -251,6 +261,30 @@ func (c *PlaylistController) HandlePlaylist(ctx context.Context, item *models.Pl
 	c.Set("deferred", deferred)
 	c.Set("result", results)
 	return nil
+}
+
+// ListPlaylists returns the library playlists the user can add to.
+//
+// Choosing from this list replaces matching a typed title against the library:
+// a typo used to silently create a new playlist, and duplicate names left the
+// app guessing which one was meant.
+func (c *PlaylistController) ListPlaylists(ctx context.Context, userToken string) ([]Playlist, error) {
+	if strings.TrimSpace(userToken) == "" {
+		return nil, ErrMissingUserToken
+	}
+
+	developerToken, err := DeveloperToken()
+	if err != nil {
+		return nil, err
+	}
+
+	client := newAppleMusicClient(developerToken, userToken)
+
+	playlists, err := client.LibraryPlaylists(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return editablePlaylists(playlists), nil
 }
 
 // SearchTracks resolves a free-text query to catalog candidates, for the
