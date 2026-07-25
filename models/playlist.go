@@ -14,3 +14,18 @@ type Playlist struct {
 	// server signs its own token rather than trusting a client-supplied one.
 	DeveloperToken string `json:"developerToken"`
 }
+
+// SearchRequest is the body for POST /api/search, used when someone rejects a
+// suggested match and searches for the right track themselves.
+type SearchRequest struct {
+	UserToken string `json:"userToken"`
+	Query     string `json:"query"`
+}
+
+// AddTracksRequest is the body for POST /api/playlist/tracks, used to add the
+// tracks a person confirmed on the results screen.
+type AddTracksRequest struct {
+	UserToken  string   `json:"userToken"`
+	PlaylistID string   `json:"playlistId"`
+	SongIDs    []string `json:"songIds"`
+}

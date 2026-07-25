@@ -21,14 +21,28 @@ var ErrMissingUserToken = errors.New("Apple Music 사용자 토큰이 없습니�
 // ErrMissingTitle is returned when the playlist title is blank.
 var ErrMissingTitle = errors.New("플레이리스트 제목이 없습니다")
 
+// ErrMissingQuery is returned when a search request carries no search term.
+var ErrMissingQuery = errors.New("검색어가 없습니다")
+
+// ErrMissingPlaylistID is returned when a track-add request names no playlist.
+var ErrMissingPlaylistID = errors.New("플레이리스트를 찾을 수 없습니다. 처음부터 다시 시도해 주세요")
+
 type PlaylistController struct {
 	controllers.Controller
 }
 
-// TrackResult mirrors the shape the frontend renders.
+// TrackResult is the outcome for one input line.
+//
+// Status replaced a plain bool: "added" and "not found" were the only two
+// outcomes the old API could express, so a low-confidence guess had to be
+// reported as a success. "review" is the third case — we found something
+// plausible but will not add it without a person agreeing.
 type TrackResult struct {
-	Song   string `json:"song"`
-	Status bool   `json:"status"`
+	Song       string      `json:"song"`
+	Status     MatchStatus `json:"status"`
+	Score      float64     `json:"score,omitempty"`
+	Track      *Track      `json:"track,omitempty"`
+	Candidates []Track     `json:"candidates,omitempty"`
 }
 
 // GetDeveloperToken returns a signed MusicKit developer token.
@@ -111,44 +125,108 @@ func (c *PlaylistController) HandlePlaylist(ctx context.Context, item *models.Pl
 	storefront := client.Storefront(ctx)
 
 	results := make([]TrackResult, len(songs))
-	// Index of each song whose catalog id was resolved, so a failed add can be
-	// mapped back to the right rows.
+	// Index of each confidently matched song, so a failed add can be mapped back
+	// to the right rows.
 	var pendingIndexes []int
 	var pendingIDs []string
 
 	for index, song := range songs {
 		normalised := transformText(song)
-		results[index] = TrackResult{Song: normalised, Status: false}
+		results[index] = TrackResult{Song: normalised, Status: MatchMissing}
 
 		artist, songTitle, ok := splitArtistTitle(normalised)
 		if !ok {
 			continue
 		}
 
-		songID, err := client.SearchSong(ctx, storefront, artist+" "+songTitle)
+		candidates, err := client.SearchSongs(ctx, storefront, artist+" "+songTitle)
 		if err != nil {
 			log.Printf("search failed for %q: %v", normalised, err)
 			continue
 		}
 
-		pendingIndexes = append(pendingIndexes, index)
-		pendingIDs = append(pendingIDs, songID)
+		match := BestMatch(artist, songTitle, candidates)
+		results[index].Status = match.Status
+		results[index].Score = match.Score
+		results[index].Track = match.Track
+		results[index].Candidates = match.Candidates
+
+		if match.Status == MatchAdded {
+			pendingIndexes = append(pendingIndexes, index)
+			pendingIDs = append(pendingIDs, match.Track.ID)
+		}
 	}
 
 	for start := 0; start < len(pendingIDs); start += addTracksChunkSize {
 		end := min(start+addTracksChunkSize, len(pendingIDs))
 
-		chunkErr := client.AddTracks(ctx, playlistID, pendingIDs[start:end])
-		if chunkErr != nil {
-			log.Printf("add tracks failed (%d-%d): %v", start, end, chunkErr)
+		if err := client.AddTracks(ctx, playlistID, pendingIDs[start:end]); err != nil {
+			log.Printf("add tracks failed (%d-%d): %v", start, end, err)
+			// The track was identified but never made it in. "review" keeps the
+			// match on screen with a way to add it, which "missing" would throw
+			// away and "added" would lie about.
+			for _, index := range pendingIndexes[start:end] {
+				results[index].Status = MatchReview
+			}
 			continue
-		}
-		for _, index := range pendingIndexes[start:end] {
-			results[index].Status = true
 		}
 	}
 
+	// The playlist id lets the browser add confirmed picks afterwards without
+	// re-resolving the playlist by name.
+	c.Set("playlistId", playlistID)
 	c.Set("result", results)
+	return nil
+}
+
+// SearchTracks resolves a free-text query to catalog candidates, for the
+// "이 곡이 아닌데" retry on the results screen.
+func (c *PlaylistController) SearchTracks(ctx context.Context, userToken, query string) ([]Track, error) {
+	if strings.TrimSpace(userToken) == "" {
+		return nil, ErrMissingUserToken
+	}
+	if strings.TrimSpace(query) == "" {
+		return nil, ErrMissingQuery
+	}
+
+	developerToken, err := DeveloperToken()
+	if err != nil {
+		return nil, err
+	}
+
+	client := newAppleMusicClient(developerToken, userToken)
+	return client.SearchSongs(ctx, client.Storefront(ctx), strings.TrimSpace(query))
+}
+
+// AddConfirmedTracks appends tracks the user picked to an existing playlist.
+func (c *PlaylistController) AddConfirmedTracks(
+	ctx context.Context,
+	userToken, playlistID string,
+	songIDs []string,
+) error {
+	if strings.TrimSpace(userToken) == "" {
+		return ErrMissingUserToken
+	}
+	if strings.TrimSpace(playlistID) == "" {
+		return ErrMissingPlaylistID
+	}
+	if len(songIDs) == 0 {
+		return nil
+	}
+
+	developerToken, err := DeveloperToken()
+	if err != nil {
+		return err
+	}
+
+	client := newAppleMusicClient(developerToken, userToken)
+
+	for start := 0; start < len(songIDs); start += addTracksChunkSize {
+		end := min(start+addTracksChunkSize, len(songIDs))
+		if err := client.AddTracks(ctx, playlistID, songIDs[start:end]); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

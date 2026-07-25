@@ -218,38 +218,94 @@ func (c *appleMusicClient) CreatePlaylist(ctx context.Context, name string) (str
 	return result.Data[0].ID, nil
 }
 
+// searchCandidateLimit is how many catalog hits are considered per query.
+//
+// The old code asked for one result and used it unconditionally. Several are
+// needed so a wrong-but-first hit can lose to a better one further down.
+const searchCandidateLimit = 5
+
+// Track is a catalog song, carrying enough for a person to recognise it.
+// Artwork and preview come back in the same search response that was already
+// being fetched — the previous version parsed out the id and discarded them.
+type Track struct {
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	ArtistName string `json:"artistName"`
+	AlbumName  string `json:"albumName"`
+	ArtworkURL string `json:"artworkUrl,omitempty"`
+	PreviewURL string `json:"previewUrl,omitempty"`
+	URL        string `json:"url,omitempty"`
+}
+
 type searchResponse struct {
 	Results struct {
 		Songs struct {
 			Data []struct {
-				ID string `json:"id"`
+				ID         string `json:"id"`
+				Attributes struct {
+					Name       string `json:"name"`
+					ArtistName string `json:"artistName"`
+					AlbumName  string `json:"albumName"`
+					URL        string `json:"url"`
+					Artwork    struct {
+						URL string `json:"url"`
+					} `json:"artwork"`
+					Previews []struct {
+						URL string `json:"url"`
+					} `json:"previews"`
+				} `json:"attributes"`
 			} `json:"data"`
 		} `json:"songs"`
 	} `json:"results"`
 }
 
-// SearchSong returns the catalog id of the best match for term.
+// artworkSize fills in Apple's {w}/{h} placeholders in an artwork template URL.
+func artworkSize(template string, px int) string {
+	if template == "" {
+		return ""
+	}
+	size := fmt.Sprintf("%d", px)
+	return strings.NewReplacer("{w}", size, "{h}", size).Replace(template)
+}
+
+// SearchSongs returns up to searchCandidateLimit catalog matches for term.
 //
 // The old version reached into the decoded map with a chain of type assertions
 // and relied on `recover()` to survive a missing key. Decoding into a struct
 // makes a missing field an ordinary empty value instead.
-func (c *appleMusicClient) SearchSong(ctx context.Context, storefront, term string) (string, error) {
+func (c *appleMusicClient) SearchSongs(ctx context.Context, storefront, term string) ([]Track, error) {
 	path := fmt.Sprintf(
-		"/v1/catalog/%s/search?term=%s&types=songs&limit=1",
+		"/v1/catalog/%s/search?term=%s&types=songs&limit=%d",
 		url.PathEscape(storefront),
 		url.QueryEscape(term),
+		searchCandidateLimit,
 	)
 
 	var result searchResponse
 	if err := c.do(ctx, http.MethodGet, path, nil, &result); err != nil {
-		return "", err
+		return nil, err
 	}
 
-	songs := result.Results.Songs.Data
-	if len(songs) == 0 || songs[0].ID == "" {
-		return "", fmt.Errorf("검색 결과가 없습니다: %s", term)
+	tracks := make([]Track, 0, len(result.Results.Songs.Data))
+	for _, song := range result.Results.Songs.Data {
+		if song.ID == "" {
+			continue
+		}
+		track := Track{
+			ID:         song.ID,
+			Name:       song.Attributes.Name,
+			ArtistName: song.Attributes.ArtistName,
+			AlbumName:  song.Attributes.AlbumName,
+			ArtworkURL: artworkSize(song.Attributes.Artwork.URL, 120),
+			URL:        song.Attributes.URL,
+		}
+		if len(song.Attributes.Previews) > 0 {
+			track.PreviewURL = song.Attributes.Previews[0].URL
+		}
+		tracks = append(tracks, track)
 	}
-	return songs[0].ID, nil
+
+	return tracks, nil
 }
 
 type trackRef struct {
