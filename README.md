@@ -40,11 +40,15 @@ Apple Music API로 사용자의 라이브러리 플레이리스트를 관리하�
 | --- | --- | --- |
 | `TEAM_ID` | (필수) | Apple Developer 팀 ID |
 | `KEY_ID` | (필수) | MusicKit 키 ID |
-| `PRIVATE_KEY_PATH` | `AuthKey_GXVS6H2456.p8` | `.p8` 개인 키 경로 |
+| `PRIVATE_KEY_PATH` | 자동 탐색 | `.p8` 개인 키 경로. 비우면 실행 디렉터리의 `AuthKey_*.p8` 을 찾습니다 |
 | `PORT` | `8002` | 리스닝 포트 |
 | `ALLOWED_ORIGINS` | 프로덕션 + `localhost:9002` | CORS 허용 오리진 (쉼표 구분) |
 
 `.p8` 개인 키 파일은 저장소에 커밋하지 않습니다(`.gitignore`에 등록되어 있습니다).
+
+`TEAM_ID`·`KEY_ID`·`.p8` 는 반드시 같은 팀에서 발급된 것끼리 짝이 맞아야 합니다. 하나라도
+어긋나면 Apple 이 401 을 돌려줍니다. 키를 교체해서 구 키와 신 키가 함께 있으면 자동 탐색이
+동작하지 않으므로(어느 쪽을 쓸지 알 수 없음) `PRIVATE_KEY_PATH` 로 하나를 지정하세요.
 
 ## 곡 목록 형식
 

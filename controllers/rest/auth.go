@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -20,8 +22,8 @@ const (
 	developerTokenTTL = 12 * time.Hour
 	// developerTokenSkew forces a refresh this long before actual expiry.
 	developerTokenSkew = 30 * time.Minute
-	// defaultPrivateKeyPath is used when PRIVATE_KEY_PATH is unset.
-	defaultPrivateKeyPath = "AuthKey_GXVS6H2456.p8"
+	// privateKeyGlob matches Apple's naming for a downloaded MusicKit key.
+	privateKeyGlob = "AuthKey_*.p8"
 )
 
 var (
@@ -30,15 +32,47 @@ var (
 	cachedUntil time.Time
 )
 
-func privateKeyPath() string {
+// resolvePrivateKeyPath finds the MusicKit key to sign with.
+//
+// There is no sensible fixed default: Apple names the file after the Key ID, so
+// it changes whenever the key does. This used to fall back to one hard-coded
+// filename, which after a key rotation pointed at a key belonging to a
+// different Apple Developer team and produced a confusing "file not found".
+//
+// PRIVATE_KEY_PATH wins when set. Otherwise exactly one AuthKey_*.p8 in dir is
+// used — matching how the Dockerfile copies the key in. Zero or several matches
+// is ambiguous, so it is an error that says what to do.
+func resolvePrivateKeyPath(dir string) (string, error) {
 	if path := os.Getenv("PRIVATE_KEY_PATH"); path != "" {
-		return path
+		return path, nil
 	}
-	return defaultPrivateKeyPath
+
+	matches, err := filepath.Glob(filepath.Join(dir, privateKeyGlob))
+	if err != nil {
+		return "", fmt.Errorf("개인 키를 찾지 못했습니다: %w", err)
+	}
+
+	switch len(matches) {
+	case 1:
+		return matches[0], nil
+	case 0:
+		return "", fmt.Errorf(
+			"MusicKit 개인 키(%s)가 없습니다. .p8 파일을 두거나 PRIVATE_KEY_PATH 를 설정해 주세요",
+			privateKeyGlob,
+		)
+	default:
+		return "", fmt.Errorf(
+			"MusicKit 개인 키가 여러 개입니다 (%s). PRIVATE_KEY_PATH 로 하나를 지정해 주세요",
+			strings.Join(matches, ", "),
+		)
+	}
 }
 
 func loadPrivateKey() (*ecdsa.PrivateKey, error) {
-	path := privateKeyPath()
+	path, err := resolvePrivateKeyPath(".")
+	if err != nil {
+		return nil, err
+	}
 
 	data, err := os.ReadFile(path)
 	if err != nil {
