@@ -388,17 +388,24 @@ func (c *appleMusicClient) AddTracks(ctx context.Context, playlistID string, son
 	return c.do(ctx, http.MethodPost, path, body, nil)
 }
 
-// findPlaylistByName looks up an existing playlist by exact name, ignoring
+// findPlaylistsByName returns every playlist with this exact name, ignoring
 // surrounding whitespace.
-func findPlaylistByName(playlists []libraryPlaylist, name string) (string, bool) {
+//
+// All matches are returned rather than just the first because Apple Music
+// allows duplicate playlist names. Silently writing into whichever one came
+// back first makes the app look like it added nothing to the playlist the user
+// is watching, and makes an apparently empty playlist report "already there".
+func findPlaylistsByName(playlists []libraryPlaylist, name string) []string {
 	target := strings.TrimSpace(name)
+
+	var ids []string
 	for _, playlist := range playlists {
 		if playlist.ID == "" {
 			continue
 		}
 		if strings.TrimSpace(playlist.Attributes.Name) == target {
-			return playlist.ID, true
+			ids = append(ids, playlist.ID)
 		}
 	}
-	return "", false
+	return ids
 }

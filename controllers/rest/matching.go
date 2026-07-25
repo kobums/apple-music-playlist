@@ -59,15 +59,33 @@ func NewTrackSet(tracks []Track) *TrackSet {
 	return set
 }
 
-// Has reports whether the playlist already contains this recording.
-func (s *TrackSet) Has(track Track) bool {
+// DuplicateReason says which key matched, so a false positive can be traced to
+// the exact rule that caused it.
+type DuplicateReason string
+
+const (
+	DuplicateByCatalogID DuplicateReason = "catalog-id"
+	DuplicateByName      DuplicateReason = "name"
+)
+
+// Find reports whether the playlist already contains this recording, and why.
+func (s *TrackSet) Find(track Track) (DuplicateReason, bool) {
 	if s == nil {
-		return false
+		return "", false
 	}
 	if track.ID != "" && s.catalogIDs[track.ID] {
-		return true
+		return DuplicateByCatalogID, true
 	}
-	return s.names[trackKey(track.ArtistName, track.Name)]
+	if s.names[trackKey(track.ArtistName, track.Name)] {
+		return DuplicateByName, true
+	}
+	return "", false
+}
+
+// Has reports whether the playlist already contains this recording.
+func (s *TrackSet) Has(track Track) bool {
+	_, found := s.Find(track)
+	return found
 }
 
 // Add records a track so duplicates inside one request are caught too — the

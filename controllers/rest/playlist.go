@@ -114,8 +114,21 @@ func (c *PlaylistController) HandlePlaylist(ctx context.Context, item *models.Pl
 		return err
 	}
 
-	playlistID, found := findPlaylistByName(playlists, title)
-	if !found {
+	matches := findPlaylistsByName(playlists, title)
+	found := len(matches) > 0
+
+	var playlistID string
+	if found {
+		playlistID = matches[0]
+		if len(matches) > 1 {
+			// Apple Music allows duplicate names. Picking the first is a guess,
+			// and the user may well be looking at one of the others.
+			log.Printf(
+				"playlist %q matches %d playlists (%v); using %s",
+				title, len(matches), matches, playlistID,
+			)
+		}
+	} else {
 		playlistID, err = client.CreatePlaylist(ctx, title)
 		if err != nil {
 			return err
@@ -131,8 +144,10 @@ func (c *PlaylistController) HandlePlaylist(ctx context.Context, item *models.Pl
 			return err
 		}
 		existing = NewTrackSet(tracks)
+		log.Printf("playlist %q → %s (existing, %d tracks)", title, playlistID, len(tracks))
 	} else {
 		existing = NewTrackSet(nil)
+		log.Printf("playlist %q → %s (created)", title, playlistID)
 	}
 
 	storefront := client.Storefront(ctx)
@@ -170,7 +185,11 @@ func (c *PlaylistController) HandlePlaylist(ctx context.Context, item *models.Pl
 
 		// Already there — either from a previous run, or listed twice in this
 		// one. Report it rather than appending a second copy.
-		if existing.Has(*match.Track) {
+		if reason, duplicate := existing.Find(*match.Track); duplicate {
+			log.Printf(
+				"duplicate by %s: %q → %s - %s (%s)",
+				reason, results[index].Song, match.Track.ArtistName, match.Track.Name, match.Track.ID,
+			)
 			results[index].Status = MatchDuplicate
 			results[index].Candidates = nil
 			continue
