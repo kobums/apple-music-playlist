@@ -2,6 +2,7 @@ package rest
 
 import (
 	"regexp"
+	"sort"
 	"strings"
 )
 
@@ -49,7 +50,34 @@ func trackKey(artist, title string) string {
 	if normalizedArtist == "" && normalizedTitle == "" {
 		return ""
 	}
-	return normalizedArtist + "\x00" + normalizedTitle
+
+	key := normalizedArtist + "\x00" + normalizedTitle
+
+	// normalize() strips bracketed annotations, which is exactly where the
+	// information distinguishing one recording from another lives:
+	// "세상이 멈출 때까지" and "세상이 멈출 때까지 (Acoustic Ver.) [Instrumental]"
+	// collapsed to the same text and the second was dropped as a duplicate.
+	// Appending the variants keeps different recordings apart, while two copies
+	// of the same variant still share a key.
+	if variants := variantSuffix(artist + " " + title); variants != "" {
+		key += "\x00" + variants
+	}
+	return key
+}
+
+// variantSuffix lists the variant markers in text, sorted so the key is stable.
+func variantSuffix(text string) string {
+	found := markersIn(text)
+	if len(found) == 0 {
+		return ""
+	}
+
+	names := make([]string, 0, len(found))
+	for name := range found {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return strings.Join(names, ",")
 }
 
 func NewTrackSet(tracks []Track) *TrackSet {
@@ -124,16 +152,56 @@ var (
 // variantMarkers are words that change *which recording* a track is. A studio
 // original and its live take share a title, so without this a live version
 // scores as a perfect match.
+//
+// Bare "mr" (Korean shorthand for a karaoke backing track) is deliberately
+// absent: it matched the honorific in titles like "Mr. Brightside", and a false
+// "this is an instrumental" is worse than missing the few tracks that spell it
+// that way. "반주" and "instrumental" still cover the intent.
 var variantMarkers = []string{
 	"live", "라이브", "실황",
 	"remix", "리믹스",
-	"instrumental", "inst", "mr", "반주",
+	"instrumental", "inst", "반주",
 	"cover", "커버",
 	"karaoke", "노래방",
 	"acoustic", "어쿠스틱",
 	"remaster", "remastered", "리마스터",
 	"sped up", "slowed", "nightcore",
 	"radio edit", "extended",
+}
+
+// markerMatcher matches one variant marker. ASCII markers are matched on word
+// boundaries so "inst" does not fire inside "instrumental" and short markers do
+// not surface inside unrelated words; Korean has no word boundaries, so those
+// fall back to a substring test.
+type markerMatcher struct {
+	name    string
+	pattern *regexp.Regexp
+}
+
+var variantMarkerMatchers = compileMarkerMatchers(variantMarkers)
+
+func compileMarkerMatchers(markers []string) []markerMatcher {
+	matchers := make([]markerMatcher, 0, len(markers))
+	for _, marker := range markers {
+		if isASCII(marker) {
+			matchers = append(matchers, markerMatcher{
+				name:    marker,
+				pattern: regexp.MustCompile(`\b` + regexp.QuoteMeta(marker) + `\b`),
+			})
+			continue
+		}
+		matchers = append(matchers, markerMatcher{name: marker})
+	}
+	return matchers
+}
+
+func isASCII(s string) bool {
+	for _, r := range s {
+		if r > 127 {
+			return false
+		}
+	}
+	return true
 }
 
 // normalize reduces a title or artist to comparable text: no bracketed
@@ -147,13 +215,19 @@ func normalize(s string) string {
 	return strings.TrimSpace(s)
 }
 
-// markersIn reports which variant markers appear anywhere in the raw text.
+// markersIn reports which variant markers appear in the raw text.
 func markersIn(s string) map[string]bool {
 	lower := strings.ToLower(s)
 	found := make(map[string]bool)
-	for _, marker := range variantMarkers {
-		if strings.Contains(lower, marker) {
-			found[marker] = true
+	for _, matcher := range variantMarkerMatchers {
+		if matcher.pattern != nil {
+			if matcher.pattern.MatchString(lower) {
+				found[matcher.name] = true
+			}
+			continue
+		}
+		if strings.Contains(lower, matcher.name) {
+			found[matcher.name] = true
 		}
 	}
 	return found
