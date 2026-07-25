@@ -24,9 +24,20 @@ type MatchStatus string
 const (
 	MatchAdded     MatchStatus = "added"
 	MatchDuplicate MatchStatus = "duplicate"
-	MatchReview    MatchStatus = "review"
-	MatchMissing   MatchStatus = "missing"
+	// MatchReady is a confident match that is deliberately not in the playlist
+	// yet. Apple's API can only append, so adding the confident half now and the
+	// user's picks afterwards put those picks at the end of the playlist rather
+	// than in the pasted order. When anything still needs a decision, the whole
+	// batch waits and goes in together.
+	MatchReady   MatchStatus = "ready"
+	MatchReview  MatchStatus = "review"
+	MatchMissing MatchStatus = "missing"
 )
+
+// needsDecision reports whether a row is still waiting on the user.
+func (s MatchStatus) needsDecision() bool {
+	return s == MatchReview || s == MatchMissing
+}
 
 // TrackSet answers "is this recording already in the playlist?".
 //

@@ -202,18 +202,39 @@ func (c *PlaylistController) HandlePlaylist(ctx context.Context, item *models.Pl
 		pendingIDs = append(pendingIDs, match.Track.ID)
 	}
 
-	for start := 0; start < len(pendingIDs); start += addTracksChunkSize {
-		end := min(start+addTracksChunkSize, len(pendingIDs))
+	// Apple can only append to a playlist, so the pasted order survives only if
+	// everything goes in as one ordered batch. If any row still needs a decision,
+	// hold the confident ones back too and let the confirm step add them all.
+	deferred := false
+	for _, result := range results {
+		if result.Status.needsDecision() {
+			deferred = true
+			break
+		}
+	}
 
-		if err := client.AddTracks(ctx, playlistID, pendingIDs[start:end]); err != nil {
-			log.Printf("add tracks failed (%d-%d): %v", start, end, err)
-			// The track was identified but never made it in. "review" keeps the
-			// match on screen with a way to add it, which "missing" would throw
-			// away and "added" would lie about.
-			for _, index := range pendingIndexes[start:end] {
-				results[index].Status = MatchReview
+	if deferred {
+		for _, index := range pendingIndexes {
+			results[index].Status = MatchReady
+		}
+		log.Printf(
+			"playlist %q: holding %d confident matches until %d undecided rows are resolved",
+			title, len(pendingIDs), len(results)-len(pendingIDs),
+		)
+	} else {
+		for start := 0; start < len(pendingIDs); start += addTracksChunkSize {
+			end := min(start+addTracksChunkSize, len(pendingIDs))
+
+			if err := client.AddTracks(ctx, playlistID, pendingIDs[start:end]); err != nil {
+				log.Printf("add tracks failed (%d-%d): %v", start, end, err)
+				// The track was identified but never made it in. "review" keeps
+				// the match on screen with a way to add it, which "missing"
+				// would throw away and "added" would lie about.
+				for _, index := range pendingIndexes[start:end] {
+					results[index].Status = MatchReview
+				}
+				continue
 			}
-			continue
 		}
 	}
 
@@ -226,6 +247,8 @@ func (c *PlaylistController) HandlePlaylist(ctx context.Context, item *models.Pl
 	c.Set("playlistName", title)
 	c.Set("playlistExistingCount", existingCount)
 	c.Set("playlistCreated", !found)
+	// True when nothing was written yet and the browser must confirm to save.
+	c.Set("deferred", deferred)
 	c.Set("result", results)
 	return nil
 }
