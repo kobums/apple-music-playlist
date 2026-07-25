@@ -1,58 +1,83 @@
-# Apple Music Playlist Manager
+# Apple Music Playlist — 백엔드
 
-이 프로젝트는 Apple Music API를 사용하여 사용자의 플레이리스트를 관리하는 기능을 구현합니다. 사용자는 기존 플레이리스트에 노래를 추가하거나 새 플레이리스트를 생성할 수 있습니다.
+Apple Music API로 사용자의 라이브러리 플레이리스트를 관리하는 Go(Fiber) 서버입니다.
+같은 이름의 플레이리스트가 있으면 거기에 곡을 추가하고, 없으면 새로 만듭니다.
 
-## 기능
+## API
 
-- 기존 플레이리스트 조회
-- 노래 검색 및 플레이리스트에 추가
-- 새 플레이리스트 생성
+| 메서드 | 경로 | 설명 |
+| --- | --- | --- |
+| `GET` | `/api/token` | MusicKit 개발자 토큰 발급 |
+| `POST` | `/api/playlist` | 곡 목록을 파싱해 플레이리스트에 추가 |
 
-## 설정 방법
+`POST /api/playlist` 요청 본문:
 
-프로젝트를 사용하기 전에 다음과 같은 환경 설정이 필요합니다.
-
-### 필수 파일 및 디렉터리 구조
-
-1. **.env 파일**: 프로젝트 루트에 위치해야 하며, 다음 환경 변수를 포함해야 합니다:
-
-   - `TEAM_ID`: Apple Developer 계정의 Team ID
-   - `KEY_ID`: Apple Music API Key ID
-   - `USER_TOKEN`: Apple Music API를 사용하기 위한 사용자 토큰
-
-   `.env` 파일 예시:
-
-   ```plaintext
-   TEAM_ID=your_team_id_here
-   KEY_ID=your_key_id_here
-   USER_TOKEN=your_user_token_here
-   ```
-
-2. **AuthKey 파일 (`AUTHKEY.p8`)**: Apple Music API 키 파일 (Private Key)이며, 프로젝트 루트 디렉터리에 위치해야 합니다.
-
-### playlist.txt 작성법
-
-`playlist.txt` 파일은 플레이리스트와 추가하려는 노래의 정보를 포함해야 합니다. 각 노래는 새 줄에 입력되어야 하며, 다음 형식을 따라야 합니다:
-
-```plaintext
-playlistname: My Favorite Songs
-노래1 제목 - 아티스트1
-노래2 제목 - 아티스트2
+```json
+{
+  "title": "My favorite songs",
+  "list": "빅뱅 - 붉은 노을\n아이유 - 밤편지",
+  "userToken": "<Music User Token>"
+}
 ```
 
-## 설치 및 실행 방법
+응답:
 
-1. **의존성 설치**: Go 환경이 설정되어 있어야 합니다. 필요한 모든 의존성을 설치하려면 프로젝트 디렉터리에서 다음 명령을 실행하세요:
+```json
+{
+  "code": "ok",
+  "result": [{ "song": "빅뱅 - 붉은 노을", "status": true }]
+}
+```
 
-   ```bash
-   go mod tidy
-   ```
+실패 시에는 상태 코드와 함께 `{ "code": "error", "error": "..." }`를 돌려줍니다.
+`developerToken` 필드는 하위 호환을 위해 받기만 하고 무시합니다. 서버가 직접 서명합니다.
 
-2. **프로그램 실행**: 프로젝트 디렉터리에서 다음 명령을 실행하여 프로그램을 실행합니다:
-   ```bash
-   go run main.go
-   ```
+## 환경 변수
 
-## 문의 사항
+`.env.example`을 `.env`로 복사해 채웁니다.
 
-프로젝트에 대한 추가 문의 사항이 있을 경우 [여기](mailto:kobums@naver.com)로 문의해 주세요.
+| 변수 | 기본값 | 설명 |
+| --- | --- | --- |
+| `TEAM_ID` | (필수) | Apple Developer 팀 ID |
+| `KEY_ID` | (필수) | MusicKit 키 ID |
+| `PRIVATE_KEY_PATH` | `AuthKey_GXVS6H2456.p8` | `.p8` 개인 키 경로 |
+| `PORT` | `8002` | 리스닝 포트 |
+| `ALLOWED_ORIGINS` | 프로덕션 + `localhost:9002` | CORS 허용 오리진 (쉼표 구분) |
+
+`.p8` 개인 키 파일은 저장소에 커밋하지 않습니다(`.gitignore`에 등록되어 있습니다).
+
+## 곡 목록 형식
+
+한 줄에 한 곡씩 적습니다. 아래 세 가지 형태를 인식합니다.
+
+```plaintext
+빅뱅 - 붉은 노을
+07:19 | 빅뱅 - 붉은 노을
+07:19 | 빅뱅 ‘붉은 노을’
+```
+
+앞뒤 타임스탬프와 괄호 안 내용은 제거하고 `아티스트 - 곡 제목`으로 정규화합니다.
+빈 줄은 무시합니다.
+
+곡 검색은 로그인한 계정의 스토어프론트(`GET /v1/me/storefront`)를 따릅니다.
+조회에 실패하면 `kr`로 떨어집니다.
+
+## 실행
+
+```bash
+go mod download
+make run          # 또는 go run main.go
+```
+
+```bash
+make vet          # go vet
+make server       # bin/apple_music_playlist 빌드
+make docker       # 이미지 빌드 (멀티스테이지)
+```
+
+> `router/router.go`는 직접 관리합니다. 예전 `make server`는 `buildtool-router`로 이 파일을
+> 덮어썼지만, 이제 라우터에 에러 처리와 상태 코드 매핑이 들어 있어 코드 생성 대상이 아닙니다.
+
+## 문의
+
+[kobums@naver.com](mailto:kobums@naver.com)
