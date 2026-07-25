@@ -21,10 +21,66 @@ const (
 type MatchStatus string
 
 const (
-	MatchAdded   MatchStatus = "added"
-	MatchReview  MatchStatus = "review"
-	MatchMissing MatchStatus = "missing"
+	MatchAdded     MatchStatus = "added"
+	MatchDuplicate MatchStatus = "duplicate"
+	MatchReview    MatchStatus = "review"
+	MatchMissing   MatchStatus = "missing"
 )
+
+// TrackSet answers "is this recording already in the playlist?".
+//
+// Two keys are kept because neither alone is enough. The catalog id is exact
+// but absent from library entries that were never matched to the catalog; the
+// normalized name catches those, and also the case where the same song was
+// added earlier from a different release.
+type TrackSet struct {
+	catalogIDs map[string]bool
+	names      map[string]bool
+}
+
+// trackKey normalizes "artist + title" into a comparable identity.
+func trackKey(artist, title string) string {
+	return normalize(artist) + "\x00" + normalize(title)
+}
+
+func NewTrackSet(tracks []Track) *TrackSet {
+	set := &TrackSet{
+		catalogIDs: make(map[string]bool, len(tracks)),
+		names:      make(map[string]bool, len(tracks)),
+	}
+	for _, track := range tracks {
+		if track.ID != "" {
+			set.catalogIDs[track.ID] = true
+		}
+		if key := trackKey(track.ArtistName, track.Name); key != "\x00" {
+			set.names[key] = true
+		}
+	}
+	return set
+}
+
+// Has reports whether the playlist already contains this recording.
+func (s *TrackSet) Has(track Track) bool {
+	if s == nil {
+		return false
+	}
+	if track.ID != "" && s.catalogIDs[track.ID] {
+		return true
+	}
+	return s.names[trackKey(track.ArtistName, track.Name)]
+}
+
+// Add records a track so duplicates inside one request are caught too — the
+// same song listed twice in the pasted text must not be added twice.
+func (s *TrackSet) Add(track Track) {
+	if s == nil {
+		return
+	}
+	if track.ID != "" {
+		s.catalogIDs[track.ID] = true
+	}
+	s.names[trackKey(track.ArtistName, track.Name)] = true
+}
 
 var (
 	bracketed   = regexp.MustCompile(`[(\[{][^)\]}]*[)\]}]`)

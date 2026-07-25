@@ -188,6 +188,57 @@ func (c *appleMusicClient) LibraryPlaylists(ctx context.Context) ([]libraryPlayl
 	return all, nil
 }
 
+type libraryTracksResponse struct {
+	Data []struct {
+		Attributes struct {
+			Name       string `json:"name"`
+			ArtistName string `json:"artistName"`
+			AlbumName  string `json:"albumName"`
+			PlayParams struct {
+				// CatalogID links a library copy back to the catalog song, which
+				// is what a search returns. Library ids ("i.xxx") never equal
+				// catalog ids, so comparing those directly would never match.
+				CatalogID string `json:"catalogId"`
+			} `json:"playParams"`
+		} `json:"attributes"`
+	} `json:"data"`
+	Next string `json:"next"`
+}
+
+// PlaylistTracks lists what is already in a library playlist.
+//
+// Nothing read the playlist's contents before, so re-running the same list
+// appended every song a second time — and "add to the existing playlist" is the
+// app's main use.
+func (c *appleMusicClient) PlaylistTracks(ctx context.Context, playlistID string) ([]Track, error) {
+	var all []Track
+	path := fmt.Sprintf("/v1/me/library/playlists/%s/tracks?limit=100", url.PathEscape(playlistID))
+
+	for page := 0; page < 50 && path != ""; page++ {
+		var result libraryTracksResponse
+		if err := c.do(ctx, http.MethodGet, path, nil, &result); err != nil {
+			var apiErr *appleAPIError
+			// A playlist with no tracks answers 404 rather than an empty list.
+			if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound {
+				return nil, nil
+			}
+			return nil, err
+		}
+
+		for _, item := range result.Data {
+			all = append(all, Track{
+				ID:         item.Attributes.PlayParams.CatalogID,
+				Name:       item.Attributes.Name,
+				ArtistName: item.Attributes.ArtistName,
+				AlbumName:  item.Attributes.AlbumName,
+			})
+		}
+		path = result.Next
+	}
+
+	return all, nil
+}
+
 type createPlaylistRequest struct {
 	Attributes struct {
 		Name        string `json:"name"`

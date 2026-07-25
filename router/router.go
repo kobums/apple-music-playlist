@@ -112,14 +112,15 @@ func SetRouter(app *fiber.App) {
 		var controller rest.PlaylistController
 		controller.Init(ctx)
 
-		err := controller.AddConfirmedTracks(
+		outcome, err := controller.AddConfirmedTracks(
 			ctx.UserContext(), item.UserToken, item.PlaylistID, item.SongIDs,
 		)
 		if err != nil {
 			return fail(ctx, "add confirmed tracks", err)
 		}
 
-		controller.Set("added", item.SongIDs)
+		controller.Set("added", outcome.Added)
+		controller.Set("duplicate", outcome.Duplicate)
 		return ctx.JSON(controller.Result)
 	})
 }

@@ -122,6 +122,19 @@ func (c *PlaylistController) HandlePlaylist(ctx context.Context, item *models.Pl
 		}
 	}
 
+	// Only an existing playlist can already hold anything, so a freshly created
+	// one skips the lookup entirely.
+	var existing *TrackSet
+	if found {
+		tracks, err := client.PlaylistTracks(ctx, playlistID)
+		if err != nil {
+			return err
+		}
+		existing = NewTrackSet(tracks)
+	} else {
+		existing = NewTrackSet(nil)
+	}
+
 	storefront := client.Storefront(ctx)
 
 	results := make([]TrackResult, len(songs))
@@ -151,10 +164,21 @@ func (c *PlaylistController) HandlePlaylist(ctx context.Context, item *models.Pl
 		results[index].Track = match.Track
 		results[index].Candidates = match.Candidates
 
-		if match.Status == MatchAdded {
-			pendingIndexes = append(pendingIndexes, index)
-			pendingIDs = append(pendingIDs, match.Track.ID)
+		if match.Status != MatchAdded {
+			continue
 		}
+
+		// Already there — either from a previous run, or listed twice in this
+		// one. Report it rather than appending a second copy.
+		if existing.Has(*match.Track) {
+			results[index].Status = MatchDuplicate
+			results[index].Candidates = nil
+			continue
+		}
+		existing.Add(*match.Track)
+
+		pendingIndexes = append(pendingIndexes, index)
+		pendingIDs = append(pendingIDs, match.Track.ID)
 	}
 
 	for start := 0; start < len(pendingIDs); start += addTracksChunkSize {
@@ -198,36 +222,65 @@ func (c *PlaylistController) SearchTracks(ctx context.Context, userToken, query 
 	return client.SearchSongs(ctx, client.Storefront(ctx), strings.TrimSpace(query))
 }
 
-// AddConfirmedTracks appends tracks the user picked to an existing playlist.
+// AddTracksOutcome separates what went in from what was already there, so the
+// browser can label each row truthfully instead of claiming every pick was new.
+type AddTracksOutcome struct {
+	Added     []string `json:"added"`
+	Duplicate []string `json:"duplicate"`
+}
+
+// AddConfirmedTracks appends tracks the user picked to an existing playlist,
+// skipping any the playlist already holds.
 func (c *PlaylistController) AddConfirmedTracks(
 	ctx context.Context,
 	userToken, playlistID string,
 	songIDs []string,
-) error {
+) (AddTracksOutcome, error) {
+	outcome := AddTracksOutcome{Added: []string{}, Duplicate: []string{}}
+
 	if strings.TrimSpace(userToken) == "" {
-		return ErrMissingUserToken
+		return outcome, ErrMissingUserToken
 	}
 	if strings.TrimSpace(playlistID) == "" {
-		return ErrMissingPlaylistID
+		return outcome, ErrMissingPlaylistID
 	}
 	if len(songIDs) == 0 {
-		return nil
+		return outcome, nil
 	}
 
 	developerToken, err := DeveloperToken()
 	if err != nil {
-		return err
+		return outcome, err
 	}
 
 	client := newAppleMusicClient(developerToken, userToken)
 
-	for start := 0; start < len(songIDs); start += addTracksChunkSize {
-		end := min(start+addTracksChunkSize, len(songIDs))
-		if err := client.AddTracks(ctx, playlistID, songIDs[start:end]); err != nil {
-			return err
+	current, err := client.PlaylistTracks(ctx, playlistID)
+	if err != nil {
+		return outcome, err
+	}
+	existing := NewTrackSet(current)
+
+	for _, songID := range songIDs {
+		track := Track{ID: songID}
+		if existing.Has(track) {
+			outcome.Duplicate = append(outcome.Duplicate, songID)
+			continue
+		}
+		// Recorded immediately so the same id sent twice in one request is only
+		// added once.
+		existing.Add(track)
+		outcome.Added = append(outcome.Added, songID)
+	}
+
+	for start := 0; start < len(outcome.Added); start += addTracksChunkSize {
+		end := min(start+addTracksChunkSize, len(outcome.Added))
+		if err := client.AddTracks(ctx, playlistID, outcome.Added[start:end]); err != nil {
+			return AddTracksOutcome{Added: []string{}, Duplicate: []string{}}, err
 		}
 	}
-	return nil
+
+	return outcome, nil
 }
 
 // splitArtistTitle splits "artist - title" into its two halves.
